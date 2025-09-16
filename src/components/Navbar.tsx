@@ -40,9 +40,11 @@ const Navbar = () => {
                 {item.label}
               </Link>
             ))}
-            <Button variant="hero" size="sm">
-              Get Started
-            </Button>
+            <Link to="/login">
+              <Button variant="hero" size="sm">
+                Get Started
+              </Button>
+            </Link>
           </div>
 
           {/* Mobile Navigation */}
@@ -75,9 +77,11 @@ const Navbar = () => {
                   {item.label}
                 </Link>
               ))}
-              <Button variant="hero" size="sm" className="w-fit">
-                Get Started
-              </Button>
+              <Link to="/login">
+                <Button variant="hero" size="sm" className="w-fit">
+                  Get Started
+                </Button>
+              </Link>
             </div>
           </div>
         )}
