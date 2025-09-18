@@ -1,10 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Mic, MicOff, Play, Pause, SkipForward, CheckCircle } from "lucide-react";
+import { Mic, MicOff, Play, Pause, SkipForward, CheckCircle, Camera, CameraOff } from "lucide-react";
 import { Link } from "react-router-dom";
 
 const Interview = () => {
@@ -14,6 +14,9 @@ const Interview = () => {
   const [response, setResponse] = useState("");
   const [timer, setTimer] = useState(0);
   const [isCompleted, setIsCompleted] = useState(false);
+  const [isCameraOn, setIsCameraOn] = useState(false);
+  const [stream, setStream] = useState<MediaStream | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
 
   const questions = [
     {
@@ -60,10 +63,41 @@ const Interview = () => {
     return () => clearInterval(interval);
   }, [isRecording, timer]);
 
-  const startInterview = () => {
+  const startInterview = async () => {
     setIsInterviewStarted(true);
     setTimer(questions[currentQuestion].timeLimit);
+    await startCamera();
   };
+
+  const startCamera = async () => {
+    try {
+      const mediaStream = await navigator.mediaDevices.getUserMedia({ 
+        video: true, 
+        audio: false 
+      });
+      setStream(mediaStream);
+      setIsCameraOn(true);
+      if (videoRef.current) {
+        videoRef.current.srcObject = mediaStream;
+      }
+    } catch (error) {
+      console.error("Error accessing camera:", error);
+    }
+  };
+
+  const stopCamera = () => {
+    if (stream) {
+      stream.getTracks().forEach(track => track.stop());
+      setStream(null);
+      setIsCameraOn(false);
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      stopCamera();
+    };
+  }, []);
 
   const toggleRecording = () => {
     if (!isRecording) {
@@ -151,7 +185,7 @@ const Interview = () => {
 
   return (
     <div className="min-h-screen bg-gradient-subtle p-4">
-      <div className="max-w-4xl mx-auto">
+      <div className="max-w-6xl mx-auto">
         {/* Progress Header */}
         <Card className="mb-6 shadow-card">
           <CardContent className="p-6">
@@ -170,77 +204,129 @@ const Interview = () => {
           </CardContent>
         </Card>
 
-        {/* Question Card */}
-        <Card className="mb-6 shadow-card">
-          <CardHeader>
-            <CardTitle className="text-2xl text-foreground">
-              {questions[currentQuestion].question}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          {/* Camera Section */}
+          <div className="lg:col-span-1">
+            <Card className="shadow-card">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Camera className="h-5 w-5" />
+                  Camera View
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="relative aspect-[3/4] bg-muted rounded-lg overflow-hidden">
+                  {isCameraOn ? (
+                    <video
+                      ref={videoRef}
+                      autoPlay
+                      muted
+                      playsInline
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <CameraOff className="h-12 w-12 text-muted-foreground" />
+                    </div>
+                  )}
+                </div>
                 <Button
-                  variant={isRecording ? "destructive" : "default"}
-                  size="lg"
-                  onClick={toggleRecording}
+                  variant="outline"
+                  size="sm"
+                  onClick={isCameraOn ? stopCamera : startCamera}
+                  className="w-full mt-3"
                 >
-                  {isRecording ? (
+                  {isCameraOn ? (
                     <>
-                      <MicOff className="h-4 w-4 mr-2" />
-                      Stop Recording
+                      <CameraOff className="h-4 w-4 mr-2" />
+                      Turn Off Camera
                     </>
                   ) : (
                     <>
-                      <Mic className="h-4 w-4 mr-2" />
-                      Start Recording
+                      <Camera className="h-4 w-4 mr-2" />
+                      Turn On Camera
                     </>
                   )}
                 </Button>
-                <div className="text-lg font-mono">
-                  Time: {formatTime(timer)}
-                </div>
-              </div>
-              {isRecording && (
-                <div className="w-3 h-3 bg-destructive rounded-full animate-pulse" />
-              )}
-            </div>
-            
-            <Textarea
-              placeholder="Type your response here or use voice recording..."
-              value={response}
-              onChange={(e) => setResponse(e.target.value)}
-              className="min-h-[200px] text-base"
-            />
-            
-            <div className="flex justify-between items-center mt-6">
-              <div className="text-sm text-muted-foreground">
-                {response.length > 0 && `${response.length} characters`}
-              </div>
-              <div className="flex gap-3">
-                <Button variant="outline" onClick={nextQuestion}>
-                  <SkipForward className="h-4 w-4 mr-2" />
-                  {currentQuestion === questions.length - 1 ? "Finish" : "Next Question"}
-                </Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+              </CardContent>
+            </Card>
+          </div>
 
-        {/* Tips Card */}
-        <Card className="shadow-card">
-          <CardHeader>
-            <CardTitle className="text-lg">💡 Interview Tips</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ul className="text-sm text-muted-foreground space-y-2">
-              <li>• Use the STAR method (Situation, Task, Action, Result) for behavioral questions</li>
-              <li>• Be specific with examples from your experience</li>
-              <li>• Keep your answers concise but comprehensive</li>
-              <li>• Show enthusiasm and passion for the role</li>
-            </ul>
-          </CardContent>
-        </Card>
+          {/* Question and Response Section */}
+          <div className="lg:col-span-3 space-y-6">
+            {/* Question Card */}
+            <Card className="shadow-card">
+              <CardHeader>
+                <CardTitle className="text-2xl text-foreground">
+                  {questions[currentQuestion].question}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-4">
+                    <Button
+                      variant={isRecording ? "destructive" : "default"}
+                      size="lg"
+                      onClick={toggleRecording}
+                    >
+                      {isRecording ? (
+                        <>
+                          <MicOff className="h-4 w-4 mr-2" />
+                          Stop Recording
+                        </>
+                      ) : (
+                        <>
+                          <Mic className="h-4 w-4 mr-2" />
+                          Start Recording
+                        </>
+                      )}
+                    </Button>
+                    <div className="text-lg font-mono">
+                      Time: {formatTime(timer)}
+                    </div>
+                  </div>
+                  {isRecording && (
+                    <div className="w-3 h-3 bg-destructive rounded-full animate-pulse" />
+                  )}
+                </div>
+                
+                <Textarea
+                  placeholder="Type your response here or use voice recording..."
+                  value={response}
+                  onChange={(e) => setResponse(e.target.value)}
+                  className="min-h-[200px] text-base"
+                />
+                
+                <div className="flex justify-between items-center mt-6">
+                  <div className="text-sm text-muted-foreground">
+                    {response.length > 0 && `${response.length} characters`}
+                  </div>
+                  <div className="flex gap-3">
+                    <Button variant="outline" onClick={nextQuestion}>
+                      <SkipForward className="h-4 w-4 mr-2" />
+                      {currentQuestion === questions.length - 1 ? "Finish" : "Next Question"}
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Tips Card */}
+            <Card className="shadow-card">
+              <CardHeader>
+                <CardTitle className="text-lg">💡 Interview Tips</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ul className="text-sm text-muted-foreground space-y-2">
+                  <li>• Use the STAR method (Situation, Task, Action, Result) for behavioral questions</li>
+                  <li>• Be specific with examples from your experience</li>
+                  <li>• Keep your answers concise but comprehensive</li>
+                  <li>• Show enthusiasm and passion for the role</li>
+                </ul>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
       </div>
     </div>
   );
