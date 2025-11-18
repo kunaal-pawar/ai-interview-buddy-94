@@ -14,7 +14,111 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      interview_questions: {
+        Row: {
+          category: string
+          created_at: string
+          id: string
+          order_index: number
+          question_text: string
+          time_limit: number
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          id?: string
+          order_index: number
+          question_text: string
+          time_limit: number
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          id?: string
+          order_index?: number
+          question_text?: string
+          time_limit?: number
+        }
+        Relationships: []
+      }
+      interview_responses: {
+        Row: {
+          answered_at: string
+          audio_text: string
+          created_at: string
+          feedback: string | null
+          id: string
+          is_correct: boolean | null
+          question_id: string
+          score: number | null
+          session_id: string
+        }
+        Insert: {
+          answered_at?: string
+          audio_text: string
+          created_at?: string
+          feedback?: string | null
+          id?: string
+          is_correct?: boolean | null
+          question_id: string
+          score?: number | null
+          session_id: string
+        }
+        Update: {
+          answered_at?: string
+          audio_text?: string
+          created_at?: string
+          feedback?: string | null
+          id?: string
+          is_correct?: boolean | null
+          question_id?: string
+          score?: number | null
+          session_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "interview_responses_question_id_fkey"
+            columns: ["question_id"]
+            isOneToOne: false
+            referencedRelation: "interview_questions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "interview_responses_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "interview_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      interview_sessions: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          id: string
+          overall_score: number | null
+          started_at: string
+          user_id: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          overall_score?: number | null
+          started_at?: string
+          user_id: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          overall_score?: number | null
+          started_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
