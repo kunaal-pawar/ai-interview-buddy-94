@@ -19,19 +19,51 @@ serve(async (req) => {
 
     console.log('Received audio for transcription');
 
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    if (!LOVABLE_API_KEY) {
-      throw new Error('LOVABLE_API_KEY not configured');
+    const GOOGLE_API_KEY = Deno.env.get('GOOGLE_API_KEY');
+    if (!GOOGLE_API_KEY) {
+      throw new Error('GOOGLE_API_KEY not configured');
     }
 
-    // For now, simulate transcription - in production, integrate with speech-to-text API
-    // Using simple base64 length as a proxy for duration
-    const simulatedText = "This is a simulated transcription. In production, this would use a speech-to-text API.";
-    
-    console.log('Transcription completed');
+    // Use Google Cloud Speech-to-Text API via Gemini
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GOOGLE_API_KEY}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        contents: [{
+          parts: [
+            {
+              inline_data: {
+                mime_type: "audio/webm",
+                data: audio
+              }
+            },
+            {
+              text: "Transcribe this audio to text. Only return the transcribed text, nothing else. If the audio is unclear or empty, return an empty string."
+            }
+          ]
+        }],
+        generationConfig: {
+          temperature: 0.1,
+          maxOutputTokens: 2048,
+        }
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Gemini API error:', response.status, errorText);
+      throw new Error(`Transcription failed: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const transcribedText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+    console.log('Transcription completed:', transcribedText.substring(0, 100));
 
     return new Response(
-      JSON.stringify({ text: simulatedText }),
+      JSON.stringify({ text: transcribedText.trim() }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
