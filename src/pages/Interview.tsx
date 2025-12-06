@@ -184,82 +184,130 @@ const Interview = () => {
 
   const stopRecording = async () => {
     if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+      // Create a promise that resolves when recording stops
+      const recordingPromise = new Promise<Blob[]>((resolve) => {
+        const chunks: Blob[] = [...audioChunks];
+        
+        mediaRecorder.ondataavailable = (event) => {
+          if (event.data.size > 0) {
+            chunks.push(event.data);
+          }
+        };
+        
+        mediaRecorder.onstop = () => {
+          resolve(chunks);
+        };
+      });
+      
       mediaRecorder.stop();
       setIsRecording(false);
       
-      // Wait for audio chunks to be available
-      setTimeout(async () => {
-        await processRecording();
-      }, 100);
+      const chunks = await recordingPromise;
+      await processRecording(chunks);
     }
   };
 
-  const processRecording = async () => {
-    if (audioChunks.length === 0) return;
+  const processRecording = async (chunks: Blob[]) => {
+    if (chunks.length === 0) {
+      toast({
+        title: "No audio recorded",
+        description: "Please try recording again",
+        variant: "destructive",
+      });
+      return;
+    }
 
     setIsLoading(true);
     
     try {
       // Convert audio to base64
-      const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-      const reader = new FileReader();
+      const audioBlob = new Blob(chunks, { type: 'audio/webm' });
       
-      reader.onloadend = async () => {
-        const base64Audio = reader.result?.toString().split(',')[1];
-        
-        // Transcribe audio
-        const { data: transcribeData, error: transcribeError } = await supabase.functions.invoke('transcribe-audio', {
-          body: { audio: base64Audio }
-        });
+      const base64Audio = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const result = reader.result?.toString().split(',')[1];
+          if (result) resolve(result);
+          else reject(new Error('Failed to convert audio'));
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(audioBlob);
+      });
 
-        if (transcribeError) {
-          throw transcribeError;
-        }
+      console.log('Sending audio for transcription, size:', base64Audio.length);
+      
+      // Transcribe audio
+      const { data: transcribeData, error: transcribeError } = await supabase.functions.invoke('transcribe-audio', {
+        body: { audio: base64Audio }
+      });
 
-        const transcribedText = transcribeData.text || response;
-        setResponse(transcribedText);
+      if (transcribeError) {
+        console.error('Transcription error:', transcribeError);
+        throw new Error(transcribeError.message || 'Transcription failed');
+      }
 
-        // Evaluate answer
-        const { data: evaluationData, error: evaluationError } = await supabase.functions.invoke('evaluate-answer', {
-          body: {
-            question: questions[currentQuestion].question_text,
-            answer: transcribedText,
-            category: questions[currentQuestion].category
-          }
-        });
-
-        if (evaluationError) {
-          throw evaluationError;
-        }
-
-        // Save response
-        await supabase
-          .from('interview_responses')
-          .insert({
-            session_id: sessionId,
-            question_id: questions[currentQuestion].id,
-            audio_text: transcribedText,
-            is_correct: evaluationData.is_correct,
-            score: evaluationData.score,
-            feedback: evaluationData.feedback
-          });
-
+      const transcribedText = transcribeData?.text || '';
+      
+      if (!transcribedText) {
         toast({
-          title: "Answer Recorded",
-          description: `Score: ${evaluationData.score}/100`,
+          title: "Could not transcribe",
+          description: "Please speak clearly and try again",
+          variant: "destructive",
         });
-      };
+        setIsLoading(false);
+        return;
+      }
+      
+      setResponse(transcribedText);
+      console.log('Transcribed text:', transcribedText);
 
-      reader.readAsDataURL(audioBlob);
+      // Evaluate answer
+      const { data: evaluationData, error: evaluationError } = await supabase.functions.invoke('evaluate-answer', {
+        body: {
+          question: questions[currentQuestion].question_text,
+          answer: transcribedText,
+          category: questions[currentQuestion].category
+        }
+      });
+
+      if (evaluationError) {
+        console.error('Evaluation error:', evaluationError);
+        throw new Error(evaluationError.message || 'Evaluation failed');
+      }
+
+      console.log('Evaluation result:', evaluationData);
+
+      // Save response to database
+      const { error: insertError } = await supabase
+        .from('interview_responses')
+        .insert({
+          session_id: sessionId,
+          question_id: questions[currentQuestion].id,
+          audio_text: transcribedText,
+          is_correct: evaluationData?.is_correct ?? false,
+          score: evaluationData?.score ?? 0,
+          feedback: evaluationData?.feedback ?? ''
+        });
+
+      if (insertError) {
+        console.error('Database insert error:', insertError);
+        throw new Error('Failed to save response');
+      }
+
+      toast({
+        title: "Answer Recorded",
+        description: `Score: ${evaluationData?.score || 0}/100 - ${transcribedText.substring(0, 50)}...`,
+      });
     } catch (error) {
       console.error('Error processing recording:', error);
       toast({
         title: "Error",
-        description: "Failed to process your answer",
+        description: error instanceof Error ? error.message : "Failed to process your answer",
         variant: "destructive",
       });
     } finally {
       setIsLoading(false);
+      setAudioChunks([]);
     }
   };
 
